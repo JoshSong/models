@@ -1,0 +1,5 @@
+Times in seconds (GCP instance with 2vcpu, 13gb ram, 1 k80 gpu)
+1400 samples
+ssd mobilenet (davis): 123
+frcnn resnet101: 767
+frcnn inception v2: 459
