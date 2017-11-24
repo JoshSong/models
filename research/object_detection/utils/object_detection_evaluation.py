@@ -356,7 +356,8 @@ class OpenImagesDetectionEvaluator(ObjectDetectionEvaluator):
     # use values from the dictionary or insert None otherwise.
     if (standard_fields.InputDataFields.groundtruth_group_of in
         groundtruth_dict.keys() and
-        (groundtruth_dict[standard_fields.InputDataFields.groundtruth_group_of]
+        (hasattr(groundtruth_dict[standard_fields.InputDataFields.groundtruth_group_of], 'size') and
+            groundtruth_dict[standard_fields.InputDataFields.groundtruth_group_of]
          .size or not groundtruth_classes.size)):
       groundtruth_group_of = groundtruth_dict[
           standard_fields.InputDataFields.groundtruth_group_of]
