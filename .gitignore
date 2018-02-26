@@ -1,3 +1,9 @@
+# Protos
+research/object_detection/protos/
+
+# Slurm log files
+slurm*.out
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
