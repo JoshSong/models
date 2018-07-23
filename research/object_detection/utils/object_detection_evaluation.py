@@ -171,6 +171,7 @@ class ObjectDetectionEvaluator(DetectionEvaluator):
     # use values from the dictionary or insert None otherwise.
     if (standard_fields.InputDataFields.groundtruth_difficult in
         groundtruth_dict.keys() and
+        groundtruth_dict[standard_fields.InputDataFields.groundtruth_difficult] is not None and
         (groundtruth_dict[standard_fields.InputDataFields.groundtruth_difficult]
          .size or not groundtruth_classes.size)):
       groundtruth_difficult = groundtruth_dict[
@@ -417,6 +418,7 @@ class ObjectDetectionEvaluation(object):
     self.corloc_per_class = np.ones(self.num_class, dtype=float)
 
     self.use_weighted_mean_ap = use_weighted_mean_ap
+    self.correct_by_image_key = {}
 
   def clear_detections(self):
     self.detection_keys = {}
@@ -523,6 +525,7 @@ class ObjectDetectionEvaluation(object):
             detected_boxes, detected_scores, detected_class_labels,
             groundtruth_boxes, groundtruth_class_labels,
             groundtruth_is_difficult_list, groundtruth_is_group_of_list))
+    self.correct_by_image_key[image_key] = is_class_correctly_detected_in_image
 
     for i in range(self.num_class):
       if scores[i].shape[0] > 0:

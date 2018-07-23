@@ -32,6 +32,7 @@ Example usage:
         --input_config_path=path/to/input/configuration/file
 """
 import csv
+import json
 import os
 import re
 import tensorflow as tf
@@ -129,12 +130,12 @@ def read_data_and_evaluate(input_config, eval_config):
           skipped_images += 1
           tf.logging.info('Skipped images: {0}'.format(skipped_images))
 
-    return object_detection_evaluator.evaluate()
+    return object_detection_evaluator.evaluate(), object_detection_evaluator._evaluation.correct_by_image_key
 
   raise ValueError('Unsupported input_reader_config.')
 
 
-def write_metrics(metrics, output_dir):
+def write_metrics(metrics, output_dir, correct_by_image_key):
   """Write metrics to the output directory.
 
   Args:
@@ -147,6 +148,10 @@ def write_metrics(metrics, output_dir):
     metrics_writer = csv.writer(csvfile, delimiter=',')
     for metric_name, metric_value in metrics.items():
       metrics_writer.writerow([metric_name, str(metric_value)])
+
+  with open(os.path.join(output_dir, 'correct_by_image_key.json'), 'w') as fp:
+    bob = {key:list(val) for key, val in correct_by_image_key.iteritems()}
+    json.dump(bob, fp, indent=4)
 
 
 def main(argv):
@@ -163,10 +168,10 @@ def main(argv):
   eval_config = configs['eval_config']
   input_config = configs['eval_input_config']
 
-  metrics = read_data_and_evaluate(input_config, eval_config)
+  metrics, correct_by_image_key = read_data_and_evaluate(input_config, eval_config)
 
   # Save metrics
-  write_metrics(metrics, FLAGS.eval_dir)
+  write_metrics(metrics, FLAGS.eval_dir, correct_by_image_key)
 
 
 if __name__ == '__main__':
