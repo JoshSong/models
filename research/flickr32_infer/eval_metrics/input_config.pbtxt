@@ -1,0 +1,4 @@
+
+label_map_path: '../object_detection/data/flickr32_label_map.pbtxt'
+tf_record_input_reader: { input_path: 'detections.tfrecord' }
+
