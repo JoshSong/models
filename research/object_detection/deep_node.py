@@ -19,6 +19,9 @@ sys.path.append(os.path.dirname(os.path.dirname(file_path)))
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as vis_util
 
+min_score_thresh = 0.2
+
+# Crop image to this size
 width = 480
 height = 360
 #width = 960
@@ -31,13 +34,15 @@ bridge = CvBridge()
 cv_image = None
 image_sub = None
 image_pub = None
-int_pub = None
 
 detection_graph = None
 sess = None
 category_index = None
 
 execution_time = None
+
+detections = [] # Contains dicts with keys name, score, box
+detection_time = None
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 OUTPUT_DIR = os.path.join(FILE_DIR, 'deep_node_out')
@@ -69,19 +74,22 @@ def detect_objects(image_np):
     (boxes, scores, classes, num_detections) = sess.run(
         [boxes, scores, classes, num_detections],
         feed_dict={image_tensor: image_np_expanded})
+    boxes = np.squeeze(boxes)
+    classes = np.squeeze(classes).astype(np.int32)
+    scores = np.squeeze(scores)
 
     # Visualization of the results of a detection.
     vis_util.visualize_boxes_and_labels_on_image_array(
         image_np,
-        np.squeeze(boxes),
-        np.squeeze(classes).astype(np.int32),
-        np.squeeze(scores),
+        boxes,
+        classes,
+        scores,
         category_index,
         use_normalized_coordinates=True,
-        min_score_thresh=0.2,
+        min_score_thresh=min_score_thresh,
         line_thickness=5)
 
-    return image_np, scores, classes
+    return image_np, boxes, scores, classes
 
 def ros_service(req):
     global cv_image, saved_count
@@ -97,7 +105,7 @@ def ros_service(req):
             rospy.sleep(0.5)
 
         # Run deep classifier
-        output_img, scores, classes = detect_objects(cv_image)
+        output_img, boxes, scores, classes = detect_objects(cv_image)
 
         # Save visualization image
         cv2.imwrite(os.path.join(OUTPUT_DIR, str(saved_count) + '.jpg'), output_img)
@@ -122,8 +130,12 @@ def ros_service(req):
 
     return TriggerResponse(success=True, message=str(ret))
 
-def callback(data):
-    global cv_image, int_pub, execution_time
+def color_callback(data):
+    # TEMPORARY
+    #if detection_time is not None:
+    #    return
+    """Run CNNs when color image is received."""
+    global cv_image, execution_time, detections, detection_time
     print 'Got msg'
     start = time.time()
     try:
@@ -131,7 +143,7 @@ def callback(data):
     except CvBridgeError as e:
         print(e)
 
-    output_img, scores, classes = detect_objects(cv_image)
+    output_img, boxes, scores, classes = detect_objects(cv_image)
     print scores
     print classes
     took = time.time() - start
@@ -141,14 +153,48 @@ def callback(data):
         execution_time = 0.2 * took + 0.8 * execution_time
     print 'Avg execution time: {} seconds'.format(execution_time)
 
-    logo = 0
-    if scores[0][0] > 0.1:
-        logo = classes[0][0]
-    logo = 5
-    int_pub.publish(logo)
+    # Store detections for later
+    detections = []
+    for i in range(len(scores)):
+        if scores[i] > min_score_thresh:
+            name = category_index[classes[i]]['name']
+            detections.append({'name': name, 'score': scores[i], 'box': boxes[i]})
+    detection_time = rospy.Time.now()
 
     cv2.imshow("Image window", output_img)
     cv2.waitKey(30)
+
+def depth_callback(data):
+    """For each detection infer pose from depth image and publish."""
+    if not detections:
+        return
+
+    # The detection timestamp and this depth frame's timestamp should be similar
+    time_diff = rospy.Time.now() - detection_time
+    if abs(time_diff.to_sec()) > 0.3:
+        rospy.logerr('Time diff between depth and color too high: {}'.format(time_diff))
+        return
+
+    try:
+        cv_image = bridge.imgmsg_to_cv2(data, "passthrough")
+    except CvBridgeError as e:
+        rospy.logerr(e)
+        return
+
+    for d in detections:
+        # Get box center
+        ymin, xmin, ymax, xmax = d['box']
+        x = (xmin + xmax) / 2
+        y = (ymin + ymax) / 2
+
+        # Un-normalize
+        xpix = int(cv_image.shape[0] * x)
+        ypix = int(cv_image.shape[1] * y)
+
+        # Get depth
+        depth = cv_image[xpix][ypix]
+
+
 
 def init_deep():
     global detection_graph, sess, category_index
@@ -194,7 +240,7 @@ def init_deep():
     print 'Done'
 
 def main():
-    global image_sub, image_pub, int_pub
+    global image_sub, image_pub
 
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
@@ -204,9 +250,10 @@ def main():
     rospy.init_node('tensorflow')
     s = rospy.Service('/tensorflow_srv', Trigger, ros_service)
 
-    int_pub = rospy.Publisher("/tensorflow_msg", Int32, queue_size=1)
+    #int_pub = rospy.Publisher("/tensorflow_msg", Int32, queue_size=1)
     #image_pub = rospy.Publisher("image_topic_2", Image, queue_size=1)
-    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, callback, queue_size=1, buff_size=2**24)
+    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, color_callback, queue_size=1, buff_size=2**24)
+    #depth_sub = rospy.Subscriber("/kinect2/qhd/image_depth_rect", Image, depth_callback, queue_size=1, buff_size=2**24)
     rospy.spin()
 
 if __name__ == '__main__':
