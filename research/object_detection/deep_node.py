@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import os
 import json
 import numpy as np
@@ -9,8 +10,12 @@ from cv_bridge import CvBridge, CvBridgeError
 from std_srvs.srv import Trigger, TriggerResponse
 from std_msgs.msg import Int32
 from sensor_msgs.msg import Image
+import time
 
 import tensorflow as tf
+
+file_path = os.path.realpath(__file__)
+sys.path.append(os.path.dirname(os.path.dirname(file_path)))
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as vis_util
 
@@ -32,6 +37,8 @@ detection_graph = None
 sess = None
 category_index = None
 
+execution_time = None
+
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 OUTPUT_DIR = os.path.join(FILE_DIR, 'deep_node_out')
 
@@ -39,9 +46,11 @@ def detect_objects(image_np):
     global detection_graph, sess, category_index
 
     # Crop image
+    """
     row_off = (image_np.shape[0]-height)/2
     col_off = (image_np.shape[1]-width)/2
     image_np = image_np[row_off:row_off+height, col_off:col_off+width]
+    """
 
     # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
     image_np_expanded = np.expand_dims(image_np, axis=0)
@@ -114,7 +123,9 @@ def ros_service(req):
     return TriggerResponse(success=True, message=str(ret))
 
 def callback(data):
-    global cv_image, int_pub
+    global cv_image, int_pub, execution_time
+    print 'Got msg'
+    start = time.time()
     try:
         cv_image = bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
@@ -123,6 +134,12 @@ def callback(data):
     output_img, scores, classes = detect_objects(cv_image)
     print scores
     print classes
+    took = time.time() - start
+    if execution_time is None:
+        execution_time = took
+    else:
+        execution_time = 0.2 * took + 0.8 * execution_time
+    print 'Avg execution time: {} seconds'.format(execution_time)
 
     logo = 0
     if scores[0][0] > 0.1:
@@ -135,18 +152,20 @@ def callback(data):
 
 def init_deep():
     global detection_graph, sess, category_index
-    model_config = './models/detpri.json'
+    model_config = './node_models/ssd_v2_coco.json'
     model_details = json.load(open(model_config))
+
+    print 'Init deep'
 
     # Path to frozen detection graph.
     # This is the actual model that is used for the object detection.
     MODEL_NAME = model_details['model_folder']
     MODEL_FILE = model_details['model_filename']
-    PATH_TO_CKPT = os.path.join(FILE_DIR, 'models', MODEL_NAME, MODEL_FILE)
+    PATH_TO_CKPT = os.path.join(FILE_DIR, 'node_models', MODEL_NAME, MODEL_FILE)
 
     # List of the strings that is used to add correct label for each box.
     LABELS_FILE = model_details['labels_filename']
-    PATH_TO_LABELS = os.path.join(FILE_DIR, 'models', 'labels', LABELS_FILE)
+    PATH_TO_LABELS = os.path.join(FILE_DIR, 'node_models', 'labels', LABELS_FILE)
 
     NUM_CLASSES = model_details['number_of_classes']
 
@@ -158,6 +177,7 @@ def init_deep():
     category_index = label_map_util.create_category_index(categories)
 
     # Load a (frozen) Tensorflow model into memory.
+    print 'Loading tf model into memory'
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True # Allows GPU memory usage to grow as needed - Added by BG
     detection_graph = tf.Graph()
@@ -170,6 +190,7 @@ def init_deep():
             tf.import_graph_def(od_graph_def, name='')
 
         sess = tf.Session(graph=detection_graph, config=config)
+    print 'Done'
 
 def main():
     global image_sub, image_pub, int_pub
@@ -184,7 +205,7 @@ def main():
 
     int_pub = rospy.Publisher("/tensorflow_msg", Int32, queue_size=1)
     #image_pub = rospy.Publisher("image_topic_2", Image, queue_size=1)
-    image_sub = rospy.Subscriber("/kinect2/hd/image_color", Image, callback)
+    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, callback)
     rospy.spin()
 
 if __name__ == '__main__':
