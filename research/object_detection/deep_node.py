@@ -152,7 +152,8 @@ def callback(data):
 
 def init_deep():
     global detection_graph, sess, category_index
-    model_config = './node_models/ssd_v2_coco.json'
+    #model_config = './node_models/ssd_v2_coco.json'
+    model_config = './node_models/robo_v0.json'
     model_details = json.load(open(model_config))
 
     print 'Init deep'
@@ -205,7 +206,7 @@ def main():
 
     int_pub = rospy.Publisher("/tensorflow_msg", Int32, queue_size=1)
     #image_pub = rospy.Publisher("image_topic_2", Image, queue_size=1)
-    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, callback)
+    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, callback, queue_size=1, buff_size=2**24)
     rospy.spin()
 
 if __name__ == '__main__':
