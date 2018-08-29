@@ -5,11 +5,13 @@ import os
 import json
 import numpy as np
 import rospy
+import ros_numpy
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 from std_srvs.srv import Trigger, TriggerResponse
 from std_msgs.msg import Int32
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, PointCloud2
+from geometry_msgs.msg import PoseStamped
 import time
 
 import tensorflow as tf
@@ -18,6 +20,7 @@ file_path = os.path.realpath(__file__)
 sys.path.append(os.path.dirname(os.path.dirname(file_path)))
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as vis_util
+
 
 min_score_thresh = 0.2
 
@@ -34,6 +37,7 @@ bridge = CvBridge()
 cv_image = None
 image_sub = None
 image_pub = None
+pose_pub = None
 
 detection_graph = None
 sess = None
@@ -93,7 +97,6 @@ def detect_objects(image_np):
 
 def ros_service(req):
     global cv_image, saved_count
-    print 'called'
 
     num_detections = [0, 0]
     avg_scores = [0, 0]
@@ -131,9 +134,6 @@ def ros_service(req):
     return TriggerResponse(success=True, message=str(ret))
 
 def color_callback(data):
-    # TEMPORARY
-    #if detection_time is not None:
-    #    return
     """Run CNNs when color image is received."""
     global cv_image, execution_time, detections, detection_time
     print 'Got msg'
@@ -164,22 +164,17 @@ def color_callback(data):
     cv2.imshow("Image window", output_img)
     cv2.waitKey(30)
 
-def depth_callback(data):
-    """For each detection infer pose from depth image and publish."""
+def cloud_callback(data):
     if not detections:
         return
 
     # The detection timestamp and this depth frame's timestamp should be similar
     time_diff = rospy.Time.now() - detection_time
     if abs(time_diff.to_sec()) > 0.3:
-        rospy.logerr('Time diff between depth and color too high: {}'.format(time_diff))
+        rospy.logerr('Time diff between cloud and detection too high: {}'.format(time_diff))
         return
-
-    try:
-        cv_image = bridge.imgmsg_to_cv2(data, "passthrough")
-    except CvBridgeError as e:
-        rospy.logerr(e)
-        return
+    
+    cloud = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(data, remove_nans=False)
 
     for d in detections:
         # Get box center
@@ -188,18 +183,27 @@ def depth_callback(data):
         y = (ymin + ymax) / 2
 
         # Un-normalize
-        xpix = int(cv_image.shape[0] * x)
-        ypix = int(cv_image.shape[1] * y)
+        xpix = int(cloud.shape[1] * x)
+        ypix = int(cloud.shape[0] * y)
+        print '{} {}'.format(xpix, ypix)
 
-        # Get depth
-        depth = cv_image[xpix][ypix]
+        # Get real world coordinates
+        xyz = cloud[ypix][xpix]
+        print xyz
+        if any([np.isnan(i) for i in xyz]):
+            continue
 
-
+        # Publish
+        pose = PoseStamped()
+        pose.header.frame_id = data.header.frame_id
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = xyz
+        pose_pub.publish(pose)
 
 def init_deep():
     global detection_graph, sess, category_index
-    #model_config = './node_models/ssd_v2_coco.json'
-    model_config = './node_models/robo_v0.json'
+    model_config = './node_models/ssd_v2_coco.json'
+    #model_config = './node_models/robo_v0.json'
     model_details = json.load(open(model_config))
 
     print 'Init deep'
@@ -240,7 +244,7 @@ def init_deep():
     print 'Done'
 
 def main():
-    global image_sub, image_pub
+    global image_sub, image_pub, pose_pub
 
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
@@ -250,10 +254,13 @@ def main():
     rospy.init_node('tensorflow')
     s = rospy.Service('/tensorflow_srv', Trigger, ros_service)
 
+    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, color_callback, queue_size=1, buff_size=2**24)
+    cloud_sub = rospy.Subscriber("/kinect2/qhd/points", PointCloud2, cloud_callback, queue_size=1)
+
     #int_pub = rospy.Publisher("/tensorflow_msg", Int32, queue_size=1)
     #image_pub = rospy.Publisher("image_topic_2", Image, queue_size=1)
-    image_sub = rospy.Subscriber("/kinect2/qhd/image_color", Image, color_callback, queue_size=1, buff_size=2**24)
-    #depth_sub = rospy.Subscriber("/kinect2/qhd/image_depth_rect", Image, depth_callback, queue_size=1, buff_size=2**24)
+    pose_pub = rospy.Publisher("bob", PoseStamped, queue_size=1)
+
     rospy.spin()
 
 if __name__ == '__main__':
