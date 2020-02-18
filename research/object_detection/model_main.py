@@ -25,6 +25,8 @@ import tensorflow as tf
 from object_detection import model_hparams
 from object_detection import model_lib
 
+#tf.logging.set_verbosity(tf.logging.INFO)
+
 flags.DEFINE_string(
     'model_dir', None, 'Path to output model directory '
     'where event and checkpoint files will be written.')
@@ -59,7 +61,12 @@ FLAGS = flags.FLAGS
 def main(unused_argv):
   flags.mark_flag_as_required('model_dir')
   flags.mark_flag_as_required('pipeline_config_path')
-  config = tf.estimator.RunConfig(model_dir=FLAGS.model_dir)
+
+  # Cudnn fix for RTX 2070
+  session_config = tf.ConfigProto()
+  session_config.gpu_options.allow_growth = True
+
+  config = tf.estimator.RunConfig(model_dir=FLAGS.model_dir, session_config=session_config)
 
   train_and_eval_dict = model_lib.create_estimator_and_inputs(
       run_config=config,
