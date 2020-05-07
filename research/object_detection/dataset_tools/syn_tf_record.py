@@ -20,6 +20,7 @@ flags.DEFINE_string('imgs_dir', 'syn_patent6', 'Path to imgs directory')
 flags.DEFINE_string('info_path', 'syn_patent6_info.json', 'Path to info json')
 flags.DEFINE_string('output_path', 'output.record', 'Path to output TFRecord')
 flags.DEFINE_string('img_ext', '.png', 'Image extension')
+flags.DEFINE_boolean('rotated_90', False, 'Is image rotated 90 degrees ccw')
 FLAGS = flags.FLAGS
 
 
@@ -50,8 +51,13 @@ def dict_to_tf_example(data, img_path, label_map_dict):
         ymin.append(float(tl[1])/height)
         xmax.append(float(br[0])/width)
         ymax.append(float(br[1])/height)
-        classes_text.append('label'.encode('utf8'))
-        classes.append(label_map_dict['label'])
+
+        if FLAGS.rotated_90:
+            classes_text.append('part90'.encode('utf8'))
+            classes.append(label_map_dict['part90'])
+        else:
+            classes_text.append('part'.encode('utf8'))
+            classes.append(label_map_dict['part'])
 
     example = tf.train.Example(features=tf.train.Features(feature={
             'image/height': dataset_util.int64_feature(height),
@@ -79,6 +85,9 @@ def main(_):
     label_map_dict = label_map_util.get_label_map_dict(label_map_path)
 
     infos = json.load(open(FLAGS.info_path))
+
+    if FLAGS.rotated_90:
+        print('rotated 90')
 
     count = 0
     for id, info in infos.iteritems():

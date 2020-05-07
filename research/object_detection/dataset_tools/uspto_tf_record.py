@@ -53,8 +53,8 @@ def dict_to_tf_example(lines, img_path, label_map_dict):
         ymax.append(max(ypoints)/height)
         if max(xmin) > 1.0 or max(ymin) > 1.0 or max(xmax) > 1.0 or max(ymax) > 1.0:
             import pdb;pdb.set_trace()
-        classes_text.append('label'.encode('utf8'))
-        classes.append(label_map_dict['label'])
+        classes_text.append('part'.encode('utf8'))
+        classes.append(label_map_dict['part'])
 
     example = tf.train.Example(features=tf.train.Features(feature={
             'image/height': dataset_util.int64_feature(height),

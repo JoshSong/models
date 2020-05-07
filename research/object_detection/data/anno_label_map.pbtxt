@@ -1,4 +1,16 @@
 item {
   id: 1
-  name: 'label'
+  name: 'part'
+}
+item {
+  id: 2
+  name: 'fig'
+}
+item {
+  id: 3
+  name: 'part90'
+}
+item {
+  id: 4
+  name: 'fig90'
 }

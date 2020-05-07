@@ -3,8 +3,8 @@ INPUT_TYPE=image_tensor
 #TRAINED_CKPT_PREFIX=/media/storage/models/anno5/model.ckpt-400000
 #EXPORT_DIR=/media/storage/models/anno5/export
 PIPELINE_CONFIG_PATH=/home/josh/tf-models-repo/research/object_detection/samples/configs/anno_faster_rcnn_resnet50.config
-TRAINED_CKPT_PREFIX=/media/storage/models/anno10/model.ckpt-10000
-EXPORT_DIR=/media/storage/models/anno10/export
+TRAINED_CKPT_PREFIX=/media/storage/models/anno19/model.ckpt-20000
+EXPORT_DIR=/media/storage/models/anno19/export
 python object_detection/export_inference_graph.py \
     --input_type=${INPUT_TYPE} \
     --pipeline_config_path=${PIPELINE_CONFIG_PATH} \
